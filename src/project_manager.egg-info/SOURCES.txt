@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+setup.py
 src/project_manager/__init__.py
 src/project_manager/__main__.py
 src/project_manager.egg-info/PKG-INFO
@@ -17,6 +18,8 @@ src/project_manager/ui/__init__.py
 src/project_manager/ui/main_window.bak.py
 src/project_manager/ui/main_window.py
 src/project_manager/ui/status_bar.py
+src/project_manager/ui/window_launcher.py
+src/project_manager/ui/window_manager.py
 src/project_manager/ui/components/__init__.py
 src/project_manager/ui/components/base.py
 src/project_manager/ui/components/edit_dialog.py

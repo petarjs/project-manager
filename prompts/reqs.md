@@ -30,7 +30,7 @@ A lightweight desktop app for macOS that simplifies local project management. Ea
 - **Description**: As a user, I want to be able to edit a project, change the port, and change the Redis DB and FE and BE app URLs.
 - **Acceptance Criteria**:
   - ✅ Store project configuration (Implemented in Project model and ProjectService)
-  - ⏳ UI for editing project details
+  - ✅ UI for editing project details
 
 ## **Epic 2: New Project Creation**
 
@@ -46,8 +46,8 @@ A lightweight desktop app for macOS that simplifies local project management. Ea
 
 - **Description**: As a user, I want to see the live output of the project creation script in the app, so I know the progress and if there are any errors.
 - **Acceptance Criteria**:
-  - ⏳ Display live output from the script in a scrollable text area or popup.
-  - ⏳ Handle and display error messages if the script fails.
+  - ✅ Display live output from the script in a scrollable text area or popup.
+  - ✅ Handle and display error messages if the script fails.
 
 ## **Epic 3: Status Bar Integration**
 
@@ -70,8 +70,8 @@ A lightweight desktop app for macOS that simplifies local project management. Ea
 
 - **Description**: As a user, I want to create a new project directly from the status bar dropdown, so I can quickly start new projects without opening the full app.
 - **Acceptance Criteria**:
-  - ⏳ Add a "New Project" button in the status bar dropdown.
-  - ⏳ Launch the project creation dialog (Tkinter) when the button is clicked.
+  - ✅ Add a "New Project" button in the status bar dropdown.
+  - ✅ Launch the project creation dialog (Tkinter) when the button is clicked.
 
 ## **Epic 4: Data Persistence**
 
@@ -95,7 +95,7 @@ A lightweight desktop app for macOS that simplifies local project management. Ea
 
 - **Description**: As a user, I want a clean and simple interface to view and manage my projects, so I can navigate the app easily.
 - **Acceptance Criteria**:
-  - ⏳ Create a main window with tabs or sections for project list and project creation.
+  - ✅ Create a main window with tabs or sections for project list and project creation.
   - ✅ Added Tkinter dependency for UI development
 
 ### **Story 5.2: Provide Feedback for User Actions**
@@ -103,11 +103,12 @@ A lightweight desktop app for macOS that simplifies local project management. Ea
 - **Description**: As a user, I want visual feedback (popups or notifications) for actions like creating a project or opening a URL, so I know the action was successful.
 - **Acceptance Criteria**:
   - ⏳ Show success or error popups after actions like project creation or URL opening.
-  - ⏳ Use Tkinter messagebox for notifications.
 
 Legend:
 ✅ = Completed
 ⏳ = Pending
+
+## New
 
 edit .env files
 
