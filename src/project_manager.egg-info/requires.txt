@@ -1,5 +1,6 @@
-rumps
+rumps>=0.4.0
 pymysql>=1.1.0
+pillow>=10.1.0
 
 [dev]
 pytest>=7.0

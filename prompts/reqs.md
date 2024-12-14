@@ -56,15 +56,15 @@ A lightweight desktop app for macOS that simplifies local project management. Ea
 - **Description**: As a user, I want the app to run in the macOS status bar with an icon, so I can access it quickly without opening the full app.
 - **Acceptance Criteria**:
   - ✅ Added rumps dependency for status bar support
-  - ⏳ Display an app icon in the macOS status bar.
-  - ⏳ Show a dropdown menu when clicking the icon.
+  - ✅ Display an app icon in the macOS status bar.
+  - ✅ Show a dropdown menu when clicking the icon.
 
 ### **Story 3.2: View Projects from Status Bar**
 
 - **Description**: As a user, I want to see a list of my projects in the status bar dropdown, so I can manage them without opening the full app.
 - **Acceptance Criteria**:
-  - ⏳ Display project names in the dropdown menu.
-  - ⏳ Include submenus or options to open the project in a browser (FE/BE) or Cursor IDE.
+  - ✅ Display project names in the dropdown menu.
+  - ✅ Include submenus or options to open the project in a browser (FE/BE) or Cursor IDE.
 
 ### **Story 3.3: Add New Project from Status Bar**
 

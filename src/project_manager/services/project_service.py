@@ -552,63 +552,131 @@ class ProjectService:
         raise ValueError(f"No Redis DBs available in range {MIN_REDIS_DB}-{MAX_REDIS_DB}")
 
     def rescan_projects(self) -> None:
-        """Force a complete rescan of projects from filesystem, ignoring cached data."""
-        logger.debug("Forcing complete project rescan from filesystem...")
+        """Force a complete rescan of projects from filesystem."""
+        logger.info("Rescanning projects from filesystem...")
+        self.projects.clear()
         
-        # Track all project directories and their data
-        project_data = {}
-        
-        # Scan all directories
-        for path in PROJECTS_DIR.iterdir():
-            if not path.is_dir():
+        if not PROJECTS_DIR.exists():
+            logger.warning(f"Projects directory not found: {PROJECTS_DIR}")
+            return
+            
+        for item in PROJECTS_DIR.iterdir():
+            if not item.is_dir():
                 continue
                 
-            name = path.name
-            logger.debug(f"\nProcessing project directory: {name}")
+            name = item.name
+            logger.debug(f"Scanning project: {name}")
             
-            # Try to detect project structure
-            app_dir = path / f"{name}-app"
-            api_dir = path / f"{name}-api"
-            www_dir = path / "www"
-            standard_api_dir = path / "api"
-            plain_app_dir = path / "app"
+            # Check if it's a valid project directory
+            if not self._is_valid_project_dir(item):
+                continue
+                
+            # Detect Redis DB and port
+            redis_db = self._detect_redis_db(item) or self._get_next_redis_db()
+            detected_port = self._detect_port(item) or self._get_next_port()
             
-            # Check all three possible structures
-            has_named_app_api = app_dir.exists() and api_dir.exists()
-            has_plain_app_api = plain_app_dir.exists() and standard_api_dir.exists()
-            has_www_api = www_dir.exists() and standard_api_dir.exists()
+            # Create and add project
+            project = Project(
+                name=name,
+                pretty_name=name.replace('-', ' ').title(),
+                directory=str(item),
+                port=detected_port,
+                redis_db=redis_db,
+                fe_url=f"https://app.{name}.test",
+                be_url=f"https://api.{name}.test"
+            )
+            self.projects.append(project)
+            logger.debug(f"Added project: {name} (port={detected_port}, redis_db={redis_db})")
             
-            if has_named_app_api or has_plain_app_api or has_www_api:
-                # Read package.json for port number
-                pkg_data = self._read_package_json(path)
-                detected_port = self._get_port_from_package(pkg_data)
-                
-                # Get Redis DB from .env
-                redis_db = self._get_redis_db_from_env(path)
-                logger.debug(f"Detected Redis DB for {name}: {redis_db}")
-                
-                # If no port detected, assign a new one
-                if not detected_port or not self._is_valid_port(detected_port):
-                    detected_port = self._get_next_port()
-                    logger.debug(f"Assigned new port {detected_port} for {name}")
-                
-                logger.debug(f"Found project {name} with port {detected_port}")
-                project_data[name] = {
-                    "name": name,
-                    "pretty_name": name.replace('-', ' ').title(),
-                    "port": detected_port,
-                    "redis_db": redis_db,
-                    "directory": path,
-                    "fe_url": f"https://app.{name}.test",
-                    "be_url": f"https://api.{name}.test"
-                }
-        
-        # Create Project objects
-        self.projects = []
-        for data in project_data.values():
-            self.projects.append(Project(**data))
-            logger.debug(f"Added project {data['name']} with port={data['port']}, redis_db={data['redis_db']}")
-        
-        # Save to update the projects file
+        # Save updated projects
         self.save_projects()
-        logger.debug(f"Rescan complete. Found {len(self.projects)} projects")
+        logger.info(f"Found {len(self.projects)} projects")
+
+    def _detect_redis_db(self, project_dir: Path) -> Optional[int]:
+        """Detect Redis DB from .env files."""
+        for backend_dir in ['api', 'backend', 'server']:
+            env_file = project_dir / backend_dir / '.env'
+            if env_file.is_file():
+                try:
+                    env_content = env_file.read_text()
+                    for line in env_content.splitlines():
+                        if 'REDIS_DB=' in line:
+                            redis_db = int(line.split('=')[1].strip())
+                            logger.debug(f"Found Redis DB {redis_db} in {env_file}")
+                            return redis_db
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Failed to parse Redis DB value in {env_file}: {e}")
+                except Exception as e:
+                    logger.error(f"Error reading {env_file}: {e}")
+        return None
+
+    def _detect_port_from_package_json(self, pkg_file: Path) -> Optional[int]:
+        """Detect port from package.json file."""
+        if not pkg_file.is_file():
+            return None
+            
+        try:
+            data = json.loads(pkg_file.read_text())
+            scripts = data.get('scripts', {})
+            
+            # Check dev script first
+            if 'dev' in scripts:
+                dev_script = scripts['dev']
+                if port := self._extract_port_from_script(dev_script):
+                    logger.debug(f"Found port {port} in dev script")
+                    return port
+            
+            # Check other scripts
+            for script_name, script in scripts.items():
+                if port := self._extract_port_from_script(script):
+                    logger.debug(f"Found port {port} in {script_name} script")
+                    return port
+                    
+            return None
+        except Exception as e:
+            logger.warning(f"Error parsing {pkg_file}: {e}")
+            return None
+
+    def _is_valid_project_dir(self, path: Path) -> bool:
+        """Check if a directory contains a valid project structure.
+        
+        Args:
+            path: Directory path to check
+            
+        Returns:
+            bool: True if directory contains a valid project structure
+        """
+        if not path.is_dir():
+            return False
+            
+        name = path.name
+        
+        # Check all possible directory structures
+        app_dir = path / f"{name}-app"
+        api_dir = path / f"{name}-api"
+        www_dir = path / "www"
+        standard_api_dir = path / "api"
+        plain_app_dir = path / "app"
+        
+        # Check all three possible structures
+        has_named_app_api = app_dir.exists() and api_dir.exists()
+        has_plain_app_api = plain_app_dir.exists() and standard_api_dir.exists()
+        has_www_api = www_dir.exists() and standard_api_dir.exists()
+        
+        return has_named_app_api or has_plain_app_api or has_www_api
+
+    def _detect_port(self, project_dir: Path) -> Optional[int]:
+        """Detect port from project files.
+        
+        Args:
+            project_dir: Project directory path
+            
+        Returns:
+            Port number if found, None otherwise
+        """
+        # Read package.json for port number
+        pkg_data = self._read_package_json(project_dir)
+        if port := self._get_port_from_package(pkg_data):
+            return port
+            
+        return None

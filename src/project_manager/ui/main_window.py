@@ -12,16 +12,31 @@ logger = logging.getLogger(__name__)
 class MainWindow(tk.Tk):
     """Main application window."""
 
-    def __init__(self) -> None:
-        """Initialize the main window."""
+    def __init__(
+        self,
+        project_service: ProjectService,
+        script_service: ScriptService
+    ) -> None:
+        """Initialize the main window.
+        
+        Args:
+            project_service: Project service instance
+            script_service: Script service instance
+        """
+        logger.debug("Initializing MainWindow")
         super().__init__()
         
         self.title("Project Manager")
         self.geometry("1000x600")
         
-        # Initialize services
-        self.project_service = ProjectService()
-        self.script_service = ScriptService()
+        # Store services
+        self.project_service = project_service
+        self.script_service = script_service
+        
+        # Make sure window appears on top
+        self.attributes('-topmost', True)  # Make window stay on top
+        self.update()  # Force an update
+        self.attributes('-topmost', False)  # Allow window to go back
         
         # Create main container with padding
         main_container = ttk.Frame(self, padding="10")
@@ -47,7 +62,7 @@ class MainWindow(tk.Tk):
         )
         self.notebook.add(self.new_project.frame, text='New Project')
         
-        logger.debug("Window initialized")
+        logger.debug("Window initialized and configured")
 
     def run(self) -> None:
         """Start the application."""
