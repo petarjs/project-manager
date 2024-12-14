@@ -16,6 +16,7 @@ class Project:
         directory: Path to the project's root directory
         fe_url: Frontend URL for the project
         be_url: Backend URL for the project
+        fe_process_pid: The PID of the frontend process
     """
 
     name: str
@@ -25,6 +26,7 @@ class Project:
     directory: Path
     fe_url: Optional[str] = None
     be_url: Optional[str] = None
+    fe_process_pid: Optional[int] = None
 
     def __post_init__(self) -> None:
         """Set default URLs if not provided."""

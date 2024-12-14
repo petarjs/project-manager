@@ -4,6 +4,7 @@ import logging
 import webbrowser
 import subprocess
 from typing import Optional
+from pathlib import Path
 
 from .base import BaseComponent
 from .toast import Toast
@@ -94,40 +95,53 @@ class ProjectsList(BaseComponent):
         scrollbar.pack(side="right", fill="y")
 
     def _create_row(self, row_num: int, project: Project) -> None:
-        """Create a row for a project."""
-        style = ttk.Style()
-        style.configure("Action.TButton", padding=2)
-        style.configure("Delete.TButton", padding=2, background='red')
-        
-        # Project details
+        """Create a row in the projects list."""
+        # Project name
         ttk.Label(self.scrollable_frame, text=project.name).grid(
-            row=row_num, column=0, padx=5, pady=2, sticky='w'
+            row=row_num, column=0, padx=5, pady=5, sticky='ew'
         )
+        
+        # Display name
         ttk.Label(self.scrollable_frame, text=project.pretty_name).grid(
-            row=row_num, column=1, padx=5, pady=2, sticky='w'
+            row=row_num, column=1, padx=5, pady=5, sticky='ew'
         )
+        
+        # Port
         ttk.Label(self.scrollable_frame, text=str(project.port)).grid(
-            row=row_num, column=2, padx=5, pady=2, sticky='w'
-        )
-        redis_text = "N/A" if project.redis_db is None else str(project.redis_db)
-        ttk.Label(self.scrollable_frame, text=redis_text).grid(
-            row=row_num, column=3, padx=5, pady=2, sticky='ew'
+            row=row_num, column=2, padx=5, pady=5, sticky='ew'
         )
         
-        # Action buttons frame
+        # Redis DB
+        ttk.Label(self.scrollable_frame, text=str(project.redis_db or '')).grid(
+            row=row_num, column=3, padx=5, pady=5, sticky='ew'
+        )
+        
+        # Actions
         actions_frame = ttk.Frame(self.scrollable_frame)
-        actions_frame.grid(row=row_num, column=4, padx=5, pady=2, sticky='w')
+        actions_frame.grid(row=row_num, column=4, padx=5, pady=5, sticky='ew')
         
-        # Action buttons
-        ttk.Button(
-            actions_frame, text="FE", width=4, style="Action.TButton",
-            command=lambda: self._open_fe_url(project.name)
-        ).pack(side='left', padx=2)
+        # Frontend process button
+        fe_button_text = "Stop FE" if project.fe_process_pid else "Start FE"
+        fe_button = ttk.Button(
+            actions_frame,
+            text=fe_button_text,
+            width=8,
+            command=lambda p=project: self._toggle_frontend_process(p)
+        )
+        fe_button.pack(side='left', padx=2)
         
-        ttk.Button(
-            actions_frame, text="BE", width=4, style="Action.TButton",
-            command=lambda: self._open_be_url(project.name)
-        ).pack(side='left', padx=2)
+        # URLs
+        if project.fe_url:
+            ttk.Button(
+                actions_frame, text="FE", width=4, style="Action.TButton",
+                command=lambda: webbrowser.open(project.fe_url)
+            ).pack(side='left', padx=2)
+        
+        if project.be_url:
+            ttk.Button(
+                actions_frame, text="BE", width=4, style="Action.TButton",
+                command=lambda: webbrowser.open(project.be_url)
+            ).pack(side='left', padx=2)
         
         ttk.Button(
             actions_frame, text="IDE", width=4, style="Action.TButton",
@@ -143,6 +157,90 @@ class ProjectsList(BaseComponent):
             actions_frame, text="🗑️", width=3, style="Delete.TButton",
             command=lambda: self._delete_project(project.name)
         ).pack(side='left', padx=2)
+        
+    def _toggle_frontend_process(self, project: Project) -> None:
+        """Toggle the frontend process for a project."""
+        if project.fe_process_pid:
+            # Stop the process
+            try:
+                import psutil
+                if psutil.pid_exists(project.fe_process_pid):
+                    process = psutil.Process(project.fe_process_pid)
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except psutil.TimeoutExpired:
+                        process.kill()
+                
+                # Update project
+                self.project_service.update_project(project.name, {"fe_process_pid": None})
+                logger.info(f"Stopped frontend process for {project.name}")
+            except Exception as e:
+                logger.error(f"Error stopping frontend process: {e}")
+        else:
+            # Start the process
+            try:
+                # Find the frontend directory
+                project_dir = Path(project.directory)
+                fe_dir = None
+                
+                # Check possible frontend locations
+                fe_locations = [
+                    project_dir / "www",
+                    project_dir / "app",
+                    project_dir / f"{project.name}-app"
+                ]
+                
+                for location in fe_locations:
+                    if location.exists() and (location / "package.json").exists():
+                        fe_dir = location
+                        break
+                
+                if not fe_dir:
+                    logger.error(f"Could not find frontend directory for {project.name}")
+                    return
+                
+                # Start the process
+                process = subprocess.Popen(
+                    ["npm", "run", "dev"],
+                    cwd=str(fe_dir),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                    start_new_session=True  # This ensures the process is in its own session
+                )
+                
+                # Update project
+                self.project_service.update_project(project.name, {"fe_process_pid": process.pid})
+                logger.info(f"Started frontend process for {project.name} with PID {process.pid}")
+                
+                # Start a thread to read output
+                import threading
+                
+                def log_output(pipe, level):
+                    for line in pipe:
+                        line = line.strip()
+                        if line:
+                            logger.log(level, f"{project.name} FE: {line}")
+                
+                threading.Thread(
+                    target=log_output,
+                    args=(process.stdout, logging.INFO),
+                    daemon=True
+                ).start()
+                
+                threading.Thread(
+                    target=log_output,
+                    args=(process.stderr, logging.ERROR),
+                    daemon=True
+                ).start()
+                
+            except Exception as e:
+                logger.error(f"Error starting frontend process: {e}")
+        
+        # Refresh list to update button text
+        self.load_projects()
 
     def _delete_project(self, project_name: str) -> None:
         """Delete a project after confirmation."""

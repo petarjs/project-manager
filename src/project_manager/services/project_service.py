@@ -342,6 +342,12 @@ class ProjectService:
                         
                         data['directory'] = directory
                         
+                        # Check if frontend process is still running
+                        if data.get('fe_process_pid'):
+                            import psutil
+                            if not psutil.pid_exists(data['fe_process_pid']):
+                                data['fe_process_pid'] = None
+                        
                         # Check for Redis DB in .env even for saved projects
                         redis_db = self._get_redis_db_from_env(directory)
                         if redis_db is not None:
@@ -401,7 +407,8 @@ class ProjectService:
                         "redis_db": redis_db,
                         "directory": path,
                         "fe_url": f"https://app.{name}.test",
-                        "be_url": f"https://api.{name}.test"
+                        "be_url": f"https://api.{name}.test",
+                        "fe_process_pid": None
                     }
         
         # Create Project objects
@@ -430,7 +437,8 @@ class ProjectService:
                 "redis_db": p.redis_db,
                 "directory": str(p.directory),
                 "fe_url": p.fe_url,
-                "be_url": p.be_url
+                "be_url": p.be_url,
+                "fe_process_pid": p.fe_process_pid
             }
             for p in self.projects
         ]

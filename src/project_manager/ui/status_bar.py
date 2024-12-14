@@ -9,6 +9,7 @@ import os
 
 from ..services.project_service import ProjectService
 from ..services.script_service import ScriptService
+from ..models.project import Project
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,55 @@ class ProjectManagerStatusBar(rumps.App):
         """Handle app ready event."""
         self.refresh_projects()
     
+    def _create_project_menu_item(self, project: Project) -> rumps.MenuItem:
+        """Create a menu item for a project.
+        
+        Args:
+            project: The project to create a menu item for
+            
+        Returns:
+            The created menu item
+        """
+        project_menu = rumps.MenuItem(project.pretty_name)
+        
+        # Create frontend process menu item with proper callback binding
+        fe_process_text = "Stop FE" if project.fe_process_pid else "Start FE"
+        fe_process_item = rumps.MenuItem(
+            fe_process_text,
+            callback=self._make_toggle_callback(project)
+        )
+        
+        project_menu.update([
+            fe_process_item,
+            None,  # Separator
+            rumps.MenuItem(
+                "Open Frontend",
+                callback=lambda x, url=project.fe_url: webbrowser.open(url) if url else None
+            ),
+            rumps.MenuItem(
+                "Open Backend",
+                callback=lambda x, url=project.be_url: webbrowser.open(url) if url else None
+            ),
+            rumps.MenuItem(
+                "Open in Cursor",
+                callback=lambda x, dir=project.directory: subprocess.run(['cursor', str(dir)], check=True)
+            )
+        ])
+        return project_menu
+        
+    def _make_toggle_callback(self, project: Project):
+        """Create a callback for toggling a project's frontend process.
+        
+        Args:
+            project: The project to create a callback for
+            
+        Returns:
+            The callback function
+        """
+        def callback(_):
+            self.toggle_frontend_process(project)
+        return callback
+        
     def refresh_projects(self, _: Optional[rumps.MenuItem] = None) -> None:
         """Refresh the projects list in the menu."""
         logger.debug("Refreshing status bar projects menu")
@@ -102,22 +152,7 @@ class ProjectManagerStatusBar(rumps.App):
         # Add projects
         if self.project_service.projects:
             for project in self.project_service.projects:
-                project_menu = rumps.MenuItem(project.pretty_name)
-                project_menu.update([
-                    rumps.MenuItem(
-                        "Open Frontend",
-                        callback=lambda x, url=project.fe_url: webbrowser.open(url) if url else None
-                    ),
-                    rumps.MenuItem(
-                        "Open Backend",
-                        callback=lambda x, url=project.be_url: webbrowser.open(url) if url else None
-                    ),
-                    rumps.MenuItem(
-                        "Open in Cursor",
-                        callback=lambda x, dir=project.directory: subprocess.run(['cursor', str(dir)], check=True)
-                    )
-                ])
-                new_menu.append(project_menu)
+                new_menu.append(self._create_project_menu_item(project))
         else:
             no_projects = rumps.MenuItem("No projects found")
             no_projects.set_callback(None)  # Make it non-clickable
@@ -134,3 +169,91 @@ class ProjectManagerStatusBar(rumps.App):
         # Replace entire menu
         self.menu.clear()
         self.menu = new_menu
+    
+    def toggle_frontend_process(self, project: Project) -> None:
+        """Toggle the frontend process for a project.
+        
+        Args:
+            project: The project to toggle
+        """
+        if project.fe_process_pid:
+            # Stop the process
+            try:
+                import psutil
+                if psutil.pid_exists(project.fe_process_pid):
+                    process = psutil.Process(project.fe_process_pid)
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except psutil.TimeoutExpired:
+                        process.kill()
+                
+                # Update project
+                self.project_service.update_project(project.name, {"fe_process_pid": None})
+                logger.info(f"Stopped frontend process for {project.name}")
+            except Exception as e:
+                logger.error(f"Error stopping frontend process: {e}")
+        else:
+            # Start the process
+            try:
+                # Find the frontend directory
+                project_dir = Path(project.directory)
+                fe_dir = None
+                
+                # Check possible frontend locations
+                fe_locations = [
+                    project_dir / "www",
+                    project_dir / "app",
+                    project_dir / f"{project.name}-app"
+                ]
+                
+                for location in fe_locations:
+                    if location.exists() and (location / "package.json").exists():
+                        fe_dir = location
+                        break
+                
+                if not fe_dir:
+                    logger.error(f"Could not find frontend directory for {project.name}")
+                    return
+                
+                # Start the process
+                process = subprocess.Popen(
+                    ["npm", "run", "dev"],
+                    cwd=str(fe_dir),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                    start_new_session=True  # This ensures the process is in its own session
+                )
+                
+                # Update project
+                self.project_service.update_project(project.name, {"fe_process_pid": process.pid})
+                logger.info(f"Started frontend process for {project.name} with PID {process.pid}")
+                
+                # Start a thread to read output
+                import threading
+                
+                def log_output(pipe, level):
+                    for line in pipe:
+                        line = line.strip()
+                        if line:
+                            logger.log(level, f"{project.name} FE: {line}")
+                
+                threading.Thread(
+                    target=log_output,
+                    args=(process.stdout, logging.INFO),
+                    daemon=True
+                ).start()
+                
+                threading.Thread(
+                    target=log_output,
+                    args=(process.stderr, logging.ERROR),
+                    daemon=True
+                ).start()
+                
+            except Exception as e:
+                logger.error(f"Error starting frontend process: {e}")
+        
+        # Refresh menu to update button text
+        self.refresh_projects()
