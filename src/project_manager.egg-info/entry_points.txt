@@ -1,0 +1,2 @@
+[console_scripts]
+project-manager = project_manager.__main__:main

@@ -1,0 +1,11 @@
+Metadata-Version: 2.1
+Name: project-manager
+Version: 0.1.0
+Summary: Local project management tool for macOS
+Requires-Python: >=3.9
+Requires-Dist: rumps
+Requires-Dist: pymysql>=1.1.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-mock>=3.10; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
